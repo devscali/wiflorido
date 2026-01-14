@@ -3,7 +3,7 @@
  * Plugin Name: Wiflorido
  * Plugin URI: https://calidevs.com
  * Description: 🐷 Plugin para administrar PDFs de promociones por sucursal. Sube un PDF y se muestra automáticamente en tu URL personalizada. Perfecto para portales cautivos de WiFi.
- * Version: 1.0.0
+ * Version: 1.2.1
  * Author: Cali Devs
  * Author URI: https://calidevs.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes del plugin
-define('WIFLORIDO_VERSION', '1.0.0');
+define('WIFLORIDO_VERSION', '1.2.1');
 define('WIFLORIDO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WIFLORIDO_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -60,6 +60,7 @@ class Wiflorido {
         // AJAX handlers
         add_action('wp_ajax_wiflorido_upload_pdf', array($this, 'ajax_upload_pdf'));
         add_action('wp_ajax_wiflorido_delete_pdf', array($this, 'ajax_delete_pdf'));
+        add_action('wp_ajax_wiflorido_drag_upload', array($this, 'ajax_drag_upload'));
         
         // Links en la lista de plugins
         add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'plugin_action_links'));
@@ -942,6 +943,13 @@ class Wiflorido {
             if ($new_slug !== $old_slug) {
                 $settings['slug'] = $new_slug;
                 update_option($this->option_name, $settings);
+
+                // Re-registrar la regla con el nuevo slug
+                add_rewrite_rule(
+                    '^' . preg_quote($new_slug, '/') . '/?$',
+                    'index.php?wiflorido_promo=1',
+                    'top'
+                );
                 flush_rewrite_rules();
                 echo '<div class="wiflorido-notice success">✅ ¡Configuración guardada! La nueva URL es: <strong>' . home_url('/' . $new_slug) . '</strong></div>';
             }
@@ -955,7 +963,7 @@ class Wiflorido {
                 <span class="pig-logo">🐷</span>
                 <div>
                     <h1>Wiflorido <span class="version">v<?php echo WIFLORIDO_VERSION; ?></span></h1>
-                    <p class="by-calidevs">Desarrollado por <a href="https://calidevs.com" target="_blank">Cali Devs</a></p>
+                    <p class="by-calidevs">Desarrollado por <a href="https://calidevs.com" target="_blank">Calidevs</a></p>
                 </div>
             </div>
             
@@ -1061,7 +1069,7 @@ class Wiflorido {
                 </div>
                 
                 <div class="wiflorido-footer">
-                    <p>🐷 Wiflorido v<?php echo WIFLORIDO_VERSION; ?> • Hecho con ❤️ por <a href="https://calidevs.com" target="_blank">Cali Devs</a></p>
+                    <p>🐷 Wiflorido v<?php echo WIFLORIDO_VERSION; ?> • Hecho en Tijuana para Distribuidora El Florido por <a href="https://calidevs.com" target="_blank">Calidevs</a></p>
                 </div>
                 
             </div>
@@ -1194,11 +1202,11 @@ class Wiflorido {
                 $('#wiflorido-upload-content').hide();
                 $('#wiflorido-upload-btn').hide();
 
-                // Subir archivo usando wp.media
+                // Subir archivo usando AJAX propio
                 var formData = new FormData();
-                formData.append('file', file);
-                formData.append('action', 'upload-attachment');
-                formData.append('_wpnonce', wpApiSettings?.nonce || '<?php echo wp_create_nonce('media-form'); ?>');
+                formData.append('pdf_file', file);
+                formData.append('action', 'wiflorido_drag_upload');
+                formData.append('nonce', '<?php echo wp_create_nonce('wiflorido_drag_nonce'); ?>');
 
                 $.ajax({
                     url: ajaxurl,
@@ -1207,30 +1215,13 @@ class Wiflorido {
                     processData: false,
                     contentType: false,
                     success: function(response) {
-                        if (response.success && response.data && response.data.id) {
-                            // Ahora guardar en nuestro plugin
-                            $.post(ajaxurl, {
-                                action: 'wiflorido_upload_pdf',
-                                pdf_id: response.data.id,
-                                pdf_url: response.data.url,
-                                pdf_name: response.data.filename,
-                                pdf_size: response.data.filesizeHumanReadable || '',
-                                nonce: '<?php echo wp_create_nonce('wiflorido_upload_nonce'); ?>'
-                            }, function(res) {
-                                if (res.success) {
-                                    location.reload();
-                                } else {
-                                    $('#wiflorido-loading').removeClass('active');
-                                    $('#wiflorido-upload-content').show();
-                                    $('#wiflorido-upload-btn').show();
-                                    $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ ' + res.data + '</div>');
-                                }
-                            });
+                        if (response.success) {
+                            location.reload();
                         } else {
                             $('#wiflorido-loading').removeClass('active');
                             $('#wiflorido-upload-content').show();
                             $('#wiflorido-upload-btn').show();
-                            var errorMsg = response.data && response.data.message ? response.data.message : 'Error al subir el archivo';
+                            var errorMsg = response.data || 'Error al subir el archivo';
                             $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ ' + errorMsg + '</div>');
                         }
                     },
@@ -1341,6 +1332,77 @@ class Wiflorido {
         update_option($this->option_name, $settings);
         
         wp_send_json_success('PDF eliminado.');
+    }
+
+    /**
+     * AJAX: Subir PDF por Drag & Drop
+     */
+    public function ajax_drag_upload() {
+        // Verificar nonce
+        if (!check_ajax_referer('wiflorido_drag_nonce', 'nonce', false)) {
+            wp_send_json_error('Sesión expirada. Recarga la página e intenta de nuevo.');
+        }
+
+        // Verificar permisos
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error('No tienes permisos para realizar esta acción.');
+        }
+
+        // Verificar que se subió un archivo
+        if (empty($_FILES['pdf_file'])) {
+            wp_send_json_error('No se recibió ningún archivo.');
+        }
+
+        $file = $_FILES['pdf_file'];
+
+        // Verificar errores de subida
+        if ($file['error'] !== UPLOAD_ERR_OK) {
+            wp_send_json_error('Error al subir el archivo. Código: ' . $file['error']);
+        }
+
+        // Verificar tipo de archivo
+        $file_type = wp_check_filetype($file['name']);
+        if ($file_type['ext'] !== 'pdf') {
+            wp_send_json_error('Solo se permiten archivos PDF.');
+        }
+
+        // Verificar MIME type real
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+
+        if ($mime !== 'application/pdf') {
+            wp_send_json_error('El archivo no es un PDF válido.');
+        }
+
+        // Incluir funciones de WordPress para manejo de archivos
+        require_once(ABSPATH . 'wp-admin/includes/file.php');
+        require_once(ABSPATH . 'wp-admin/includes/media.php');
+        require_once(ABSPATH . 'wp-admin/includes/image.php');
+
+        // Subir a la biblioteca de medios
+        $attachment_id = media_handle_upload('pdf_file', 0);
+
+        if (is_wp_error($attachment_id)) {
+            wp_send_json_error('Error al guardar: ' . $attachment_id->get_error_message());
+        }
+
+        // Obtener datos del attachment
+        $pdf_url = wp_get_attachment_url($attachment_id);
+        $pdf_name = basename(get_attached_file($attachment_id));
+        $pdf_size = size_format(filesize(get_attached_file($attachment_id)));
+
+        // Guardar configuración
+        $settings = get_option($this->option_name, $this->get_default_settings());
+        $settings['pdf_id'] = $attachment_id;
+        $settings['pdf_url'] = $pdf_url;
+        $settings['pdf_name'] = $pdf_name;
+        $settings['pdf_size'] = $pdf_size;
+        $settings['last_updated'] = current_time('d/m/Y H:i');
+
+        update_option($this->option_name, $settings);
+
+        wp_send_json_success('PDF subido correctamente.');
     }
 }
 
