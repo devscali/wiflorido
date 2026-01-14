@@ -625,6 +625,13 @@ class Wiflorido {
                 background: linear-gradient(135deg, #e8f4fd 0%, #dbeafe 100%);
                 transform: translateY(-2px);
             }
+            .wiflorido-upload-area.drag-over {
+                border-color: #22c55e;
+                border-style: solid;
+                background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+                transform: scale(1.02);
+                box-shadow: 0 8px 30px rgba(34, 197, 94, 0.3);
+            }
             .wiflorido-upload-area.has-pdf {
                 border-color: #22c55e;
                 background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
@@ -1077,36 +1084,36 @@ class Wiflorido {
                 });
             });
             
-            // Upload PDF
+            // Upload PDF (click)
             $('#wiflorido-upload-btn, #wiflorido-upload-area').on('click', function(e) {
                 e.preventDefault();
                 e.stopPropagation();
-                
+
                 if (mediaUploader) {
                     mediaUploader.open();
                     return;
                 }
-                
+
                 mediaUploader = wp.media({
                     title: '🐷 Seleccionar PDF de Promociones',
                     button: { text: 'Usar este PDF' },
                     library: { type: 'application/pdf' },
                     multiple: false
                 });
-                
+
                 mediaUploader.on('select', function() {
                     var attachment = mediaUploader.state().get('selection').first().toJSON();
-                    
+
                     if (attachment.mime !== 'application/pdf') {
                         alert('⚠️ Por favor selecciona un archivo PDF');
                         return;
                     }
-                    
+
                     // Mostrar loading
                     $('#wiflorido-loading').addClass('active');
                     $('#wiflorido-upload-content').hide();
                     $('#wiflorido-upload-btn').hide();
-                    
+
                     // Enviar AJAX
                     $.post(ajaxurl, {
                         action: 'wiflorido_upload_pdf',
@@ -1131,8 +1138,109 @@ class Wiflorido {
                         $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ Error de conexión. Intenta de nuevo.</div>');
                     });
                 });
-                
+
                 mediaUploader.open();
+            });
+
+            // Drag & Drop PDF
+            var $uploadArea = $('#wiflorido-upload-area');
+
+            // Prevenir comportamiento por defecto del navegador
+            $(document).on('dragover dragenter', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            $(document).on('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            // Eventos de drag en la zona de upload
+            $uploadArea.on('dragover dragenter', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $(this).addClass('drag-over');
+            });
+
+            $uploadArea.on('dragleave dragend', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $(this).removeClass('drag-over');
+            });
+
+            // Evento de drop
+            $uploadArea.on('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                $(this).removeClass('drag-over');
+
+                var files = e.originalEvent.dataTransfer.files;
+
+                if (files.length === 0) {
+                    return;
+                }
+
+                var file = files[0];
+
+                // Validar que sea PDF
+                if (file.type !== 'application/pdf') {
+                    $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ Solo se permiten archivos PDF</div>');
+                    return;
+                }
+
+                // Mostrar loading
+                $('#wiflorido-loading').addClass('active');
+                $('#wiflorido-upload-content').hide();
+                $('#wiflorido-upload-btn').hide();
+
+                // Subir archivo usando wp.media
+                var formData = new FormData();
+                formData.append('file', file);
+                formData.append('action', 'upload-attachment');
+                formData.append('_wpnonce', wpApiSettings?.nonce || '<?php echo wp_create_nonce('media-form'); ?>');
+
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: formData,
+                    processData: false,
+                    contentType: false,
+                    success: function(response) {
+                        if (response.success && response.data && response.data.id) {
+                            // Ahora guardar en nuestro plugin
+                            $.post(ajaxurl, {
+                                action: 'wiflorido_upload_pdf',
+                                pdf_id: response.data.id,
+                                pdf_url: response.data.url,
+                                pdf_name: response.data.filename,
+                                pdf_size: response.data.filesizeHumanReadable || '',
+                                nonce: '<?php echo wp_create_nonce('wiflorido_upload_nonce'); ?>'
+                            }, function(res) {
+                                if (res.success) {
+                                    location.reload();
+                                } else {
+                                    $('#wiflorido-loading').removeClass('active');
+                                    $('#wiflorido-upload-content').show();
+                                    $('#wiflorido-upload-btn').show();
+                                    $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ ' + res.data + '</div>');
+                                }
+                            });
+                        } else {
+                            $('#wiflorido-loading').removeClass('active');
+                            $('#wiflorido-upload-content').show();
+                            $('#wiflorido-upload-btn').show();
+                            var errorMsg = response.data && response.data.message ? response.data.message : 'Error al subir el archivo';
+                            $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ ' + errorMsg + '</div>');
+                        }
+                    },
+                    error: function() {
+                        $('#wiflorido-loading').removeClass('active');
+                        $('#wiflorido-upload-content').show();
+                        $('#wiflorido-upload-btn').show();
+                        $('#wiflorido-notice-area').html('<div class="wiflorido-notice error">❌ Error de conexión. Intenta de nuevo.</div>');
+                    }
+                });
             });
             
             // Eliminar PDF
