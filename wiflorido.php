@@ -3,7 +3,7 @@
  * Plugin Name: Wiflorido
  * Plugin URI: https://calidevs.com
  * Description: 🐷 Plugin para administrar PDFs de promociones por sucursal. Sube un PDF y se muestra automáticamente en tu URL personalizada. Perfecto para portales cautivos de WiFi.
- * Version: 1.2.2
+ * Version: 1.2.3
  * Author: Cali Devs
  * Author URI: https://calidevs.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes del plugin
-define('WIFLORIDO_VERSION', '1.2.2');
+define('WIFLORIDO_VERSION', '1.2.3');
 define('WIFLORIDO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WIFLORIDO_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -376,29 +376,14 @@ class Wiflorido {
                         <div class="spinner"></div>
                         <p>Cargando promociones...</p>
                     </div>
-                    <!-- Desktop: iframe normal -->
                     <iframe
                         id="pdfFrame"
-                        src="<?php echo $pdf_url; ?>#toolbar=0&navpanes=0&scrollbar=1"
+                        src="https://mozilla.github.io/pdf.js/web/viewer.html?file=<?php echo urlencode($pdf_url); ?>"
                         title="Promociones"
                         onload="document.getElementById('pdfLoading').style.display='none';"
+                        allow="fullscreen"
                     ></iframe>
                 </div>
-                <script>
-                // Detectar iOS/móvil y usar Google Docs Viewer como fallback
-                (function() {
-                    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-                    var isMobile = window.innerWidth <= 768;
-                    var pdfUrl = '<?php echo $pdf_url; ?>';
-
-                    if (isIOS || isMobile) {
-                        var frame = document.getElementById('pdfFrame');
-                        // Usar Google Docs Viewer para iOS (mejor soporte de scroll)
-                        var googleViewerUrl = 'https://docs.google.com/viewer?url=' + encodeURIComponent(pdfUrl) + '&embedded=true';
-                        frame.src = googleViewerUrl;
-                    }
-                })();
-                </script>
                 <div class="pdf-footer">
                     Powered by <a href="https://calidevs.com" target="_blank">Cali Devs</a> 🐷
                 </div>
