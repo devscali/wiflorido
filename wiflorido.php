@@ -3,7 +3,7 @@
  * Plugin Name: Wiflorido
  * Plugin URI: https://calidevs.com
  * Description: 🐷 Plugin para administrar PDFs de promociones por sucursal. Sube un PDF y se muestra automáticamente en tu URL personalizada. Perfecto para portales cautivos de WiFi.
- * Version: 1.2.3
+ * Version: 1.2.4
  * Author: Cali Devs
  * Author URI: https://calidevs.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes del plugin
-define('WIFLORIDO_VERSION', '1.2.3');
+define('WIFLORIDO_VERSION', '1.2.4');
 define('WIFLORIDO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WIFLORIDO_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -287,13 +287,23 @@ class Wiflorido {
                     -webkit-overflow-scrolling: touch;
                 }
                 .pdf-viewer iframe,
+                .pdf-viewer embed,
                 .pdf-viewer object {
                     width: 100%;
                     height: 100%;
                     border: none;
                 }
-                /* Mobile: altura mínima para que se pueda scrollear */
+                /* Por defecto: mostrar desktop, ocultar mobile */
+                .pdf-desktop { display: block; }
+                .pdf-mobile { display: none; }
+
+                /* Mobile: mostrar embed, ocultar iframe */
                 @media (max-width: 768px) {
+                    .pdf-desktop { display: none; }
+                    .pdf-mobile {
+                        display: block;
+                        min-height: 100%;
+                    }
                     .pdf-container {
                         height: auto;
                         min-height: 100vh;
@@ -301,7 +311,7 @@ class Wiflorido {
                     .pdf-viewer {
                         flex: none;
                         height: calc(100vh - 120px);
-                        min-height: 500px;
+                        min-height: 600px;
                         overflow: auto;
                         -webkit-overflow-scrolling: touch;
                     }
@@ -376,13 +386,21 @@ class Wiflorido {
                         <div class="spinner"></div>
                         <p>Cargando promociones...</p>
                     </div>
+                    <!-- Desktop: iframe -->
                     <iframe
-                        id="pdfFrame"
-                        src="https://mozilla.github.io/pdf.js/web/viewer.html?file=<?php echo urlencode($pdf_url); ?>"
+                        id="pdfFrameDesktop"
+                        class="pdf-desktop"
+                        src="<?php echo $pdf_url; ?>#toolbar=0&navpanes=0&scrollbar=1&view=FitH"
                         title="Promociones"
                         onload="document.getElementById('pdfLoading').style.display='none';"
-                        allow="fullscreen"
                     ></iframe>
+                    <!-- Mobile: embed directo -->
+                    <embed
+                        id="pdfFrameMobile"
+                        class="pdf-mobile"
+                        src="<?php echo $pdf_url; ?>#view=FitH&scrollbar=1"
+                        type="application/pdf"
+                    />
                 </div>
                 <div class="pdf-footer">
                     Powered by <a href="https://calidevs.com" target="_blank">Cali Devs</a> 🐷
