@@ -3,7 +3,7 @@
  * Plugin Name: Wiflorido
  * Plugin URI: https://calidevs.com
  * Description: 🐷 Plugin para administrar PDFs de promociones por sucursal. Sube un PDF y se muestra automáticamente en tu URL personalizada. Perfecto para portales cautivos de WiFi.
- * Version: 1.2.1
+ * Version: 1.2.2
  * Author: Cali Devs
  * Author URI: https://calidevs.com
  * License: GPL v2 or later
@@ -18,7 +18,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Constantes del plugin
-define('WIFLORIDO_VERSION', '1.2.1');
+define('WIFLORIDO_VERSION', '1.2.2');
 define('WIFLORIDO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WIFLORIDO_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -198,7 +198,7 @@ class Wiflorido {
         <html lang="es">
         <head>
             <meta charset="UTF-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <meta name="robots" content="noindex, nofollow">
             <title>Promociones - <?php echo esc_html($site_name); ?></title>
             <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -215,6 +215,13 @@ class Wiflorido {
                     width: 100%;
                     overflow: hidden;
                     font-family: 'Fredoka', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                }
+                /* Mobile: permitir scroll */
+                @media (max-width: 768px) {
+                    html, body {
+                        overflow: auto;
+                        -webkit-overflow-scrolling: touch;
+                    }
                 }
                 .pdf-container {
                     width: 100%;
@@ -276,11 +283,28 @@ class Wiflorido {
                     width: 100%;
                     position: relative;
                     background: #525659;
+                    overflow: auto;
+                    -webkit-overflow-scrolling: touch;
                 }
-                .pdf-viewer iframe {
+                .pdf-viewer iframe,
+                .pdf-viewer object {
                     width: 100%;
                     height: 100%;
                     border: none;
+                }
+                /* Mobile: altura mínima para que se pueda scrollear */
+                @media (max-width: 768px) {
+                    .pdf-container {
+                        height: auto;
+                        min-height: 100vh;
+                    }
+                    .pdf-viewer {
+                        flex: none;
+                        height: calc(100vh - 120px);
+                        min-height: 500px;
+                        overflow: auto;
+                        -webkit-overflow-scrolling: touch;
+                    }
                 }
                 .pdf-footer {
                     background: #1e3a5f;
@@ -347,17 +371,34 @@ class Wiflorido {
                         📥 <span>Descargar</span>
                     </a>
                 </div>
-                <div class="pdf-viewer">
+                <div class="pdf-viewer" id="pdfViewer">
                     <div class="pdf-loading" id="pdfLoading">
                         <div class="spinner"></div>
                         <p>Cargando promociones...</p>
                     </div>
-                    <iframe 
-                        src="<?php echo $pdf_url; ?>#toolbar=0&navpanes=0&scrollbar=1" 
+                    <!-- Desktop: iframe normal -->
+                    <iframe
+                        id="pdfFrame"
+                        src="<?php echo $pdf_url; ?>#toolbar=0&navpanes=0&scrollbar=1"
                         title="Promociones"
                         onload="document.getElementById('pdfLoading').style.display='none';"
                     ></iframe>
                 </div>
+                <script>
+                // Detectar iOS/móvil y usar Google Docs Viewer como fallback
+                (function() {
+                    var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                    var isMobile = window.innerWidth <= 768;
+                    var pdfUrl = '<?php echo $pdf_url; ?>';
+
+                    if (isIOS || isMobile) {
+                        var frame = document.getElementById('pdfFrame');
+                        // Usar Google Docs Viewer para iOS (mejor soporte de scroll)
+                        var googleViewerUrl = 'https://docs.google.com/viewer?url=' + encodeURIComponent(pdfUrl) + '&embedded=true';
+                        frame.src = googleViewerUrl;
+                    }
+                })();
+                </script>
                 <div class="pdf-footer">
                     Powered by <a href="https://calidevs.com" target="_blank">Cali Devs</a> 🐷
                 </div>
